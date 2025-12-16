@@ -1,0 +1,60 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <Wire.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+#include <LiquidCrystal_I2C.h> // Biblioteka dla wyświetlacza I2C
+#define COLUMNS 20
+#define ROWS 4
+#pragma GCC optimize ("03")
+// Konfiguracja WiFi
+const char* ssid = "iPhone (Kasia)";
+const char* password = "kasiakasia1357";
+
+// Konfiguracja NTP
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Strefa czasowa +1 (CEST), update co 60s
+ // adres 0x27 (poprawny typ: pcf8574Address)
+// Inicjalizacja LCD (adres i rozmiar, np. 16x2)
+LiquidCrystal_I2C lcd(PCF8574_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
+
+
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin(); // lub Wire.begin(21, 22) jeśli używasz innych pinów
+  Serial.println("I2C scanner");
+  for (uint8_t addr = 1; addr < 127; ++addr) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("Found I2C device at 0x");
+      Serial.println(addr, HEX);
+    }
+  }
+}
+
+String twoDigits(int v) {
+  return (v < 10) ? "0" + String(v) : String(v);
+}
+
+void loop() {
+  timeClient.update();
+  int h = timeClient.getHours();
+  int m = timeClient.getMinutes();
+  int s = timeClient.getSeconds();
+
+  String line0 = "Czas: " + twoDigits(h) + ":" + twoDigits(m) + ":" + twoDigits(s);
+  while (line0.length() < COLUMNS) line0 += ' '; // dopasuj do 16 kolumn
+  lcd.setCursor(0, 0);
+  lcd.print(line0);
+
+
+
+  int day = timeClient.getDay(); // Dzień tygodnia (0-6)
+  lcd.setCursor(0, 1);
+  lcd.print(F("Dzien: "));
+  const char* days[] = {"Nd","Pon","Wt","Sr","Cz","Pt","So"};
+  lcd.setCursor(7, 1);
+  lcd.print(days[day]); // day jako int
+
+}
