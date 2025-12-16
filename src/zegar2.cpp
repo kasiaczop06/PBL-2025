@@ -1,24 +1,51 @@
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
+#include <HX711_ADC.h>
 #pragma GCC optimize ("O3")
-#define COLUMS 16
+#define COLUMNS 16
 #define ROWS 2
+const int HX711_dout = 18;
+const int HX711_sck = 5;
+HX711_ADC LoadCell(HX711_dout, HX711_sck);
 LiquidCrystal_I2C lcd(PCF8574_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
-void startScreen(){
+const int calVal_eepromAdress = 0;
+unsigned long t = 0;
+
+
+void waga_setup(){
+  LoadCell.begin();
+    float calibrationValue; 
+    calibrationValue = 696.0;
+    unsigned long stabilizingtime = 2000;
+    boolean _tare = true;
+    LoadCell.start(stabilizingtime, _tare);
+    LoadCell.setCalFactor(calibrationValue); 
+}
+
+void lcd_setup(){
+    lcd.begin(COLUMNS, ROWS, LCD_5x8DOTS);
     lcd.setCursor(0, 0);
-    Serial.println("00:");
+    lcd.println(F("00:00"));
     delay(1000);
     lcd.setCursor(0, 1);
-    Serial.println("00:");
+    lcd.println(F("00:00"));
     delay(1000);
 }
 void setup() {
   Serial.begin(115200);
-  lcd.begin(COLUMS, ROWS, LCD_5x8DOTS);
-  lcd.setCursor(0, 1);
-  lcd.println(F("00:"));
-  delay(1000);
+  waga_setup();
+  lcd_setup();
 }
 void loop() {
+    const int serialPrintInterval = 500;
+    if (LoadCell.update()&&(millis() > t + serialPrintInterval)) {
+      float i = LoadCell.getData();
+      lcd.setCursor(8, 0);
+      lcd.println(F("waga:"));
+      lcd.setCursor(8, 1);
+      lcd.println(i, 2);
+      t = millis();
+    }
+    delay(1000);
 }
