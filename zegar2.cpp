@@ -70,7 +70,7 @@ void lapka_kota(int (&tab)[5], float i);
 void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia);
 void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia);
 void czas(int &h, int &m, int &s, int &day);
-void alarm_ustaw(int (&tab)[5]);
+int alarm_ustaw(int (&tab)[5]);
 void alaram_check();
 
 void setup() {
@@ -109,11 +109,11 @@ void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia){
     switch(p1wcisniecia)
     {
       case 1:
-      p2wcisniecia=24%p2wcisniecia; break;
+      p2wcisniecia %24; break;
       case 2:
-      p2wcisniecia=60%p2wcisniecia; break;
+      p2wcisniecia %60; break;
       case 3:
-      p2wcisniecia=60%p2wcisniecia; break;
+      p2wcisniecia %60; break;
     }
     ostatnio2=true;
   }else if(digitalRead(p2)==LOW){
@@ -122,23 +122,26 @@ void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia){
 }
 
 
-void alarm_ustaw(int (&tab)[5])
+int alarm_ustaw(int (&tab)[5])
 {
   p1czyWcisniety(p1wcisniecia, p2wcisniecia);
   p2czyWcisniety(p2wcisniecia, p1wcisniecia);
   tab[0]=tab[0]+day;
+  if(p1wcisniecia>0){
   tab[p1wcisniecia-1]=p2wcisniecia;
-    if(tab[0]%7==0)   tab[0]=0;
-    if(tab[1]%24==0)  tab[0]=tab[0]+1;
-    if(tab[2]%60==0)  tab[1]=tab[1]+1;
-    if(tab[3]%60==0)  tab[2]=tab[2]+1;
+    if(tab[0]>=7)   tab[0]=0;
+    if(tab[1]>=24)  tab[0]=tab[0]+1;
+    if(tab[2]>=60)  tab[1]=tab[1]+1;
+    if(tab[3]>=60)  tab[2]=tab[2]+1;
+  }
+    return tab[4];
 }
 void alaram_check()
 {
-  alarm_ustaw(tab);
+  int temp=alarm_ustaw(tab);
   if((tab[0]==day)&&(tab[1]==h)&&(tab[2]==m)&&(tab[3]==s))
   {
-    while(tab[4]<=0)
+    while(temp<=0)
     {
       glosnik();
     }
@@ -378,3 +381,4 @@ void czas(int &h, int &m, int &s, int &day)
      noTone(glosnik_in);
 }
 }
+
