@@ -12,11 +12,6 @@
 #pragma GCC optimize ("O3") // pszyspiesza kompilacje ale powoduje więcej błędów
 #define COLUMNS 20
 #define ROWS 4
-Servo lapka;
-HX711_ADC LoadCell(HX711_dout, HX711_sck);
-LiquidCrystal_I2C lcd(PCF8574_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Strefa czasowa +1 (CEST), update co 60s
 
 const int servo_in=10; //połączenie servo
 const int HX711_dout = 18; // połączenia wagi
@@ -24,19 +19,21 @@ const int HX711_sck = 5; // połączenia wagi
 const char* ssid = "iPhone (Kasia)";
 const char* password = "kasiakasia1357";
 unsigned long t = 0;
-bool p1wcisniecia=0, p2wcisniecia =0, p3wcisniecia =0;
+int p1wcisniecia=0, p2wcisniecia =0;
+bool p3wcisniecia =0;
 bool ostatnio1=0, ostatnio2=0, ostatnio3 =0;
 int h, m, s, day;
-int *h1 = &h;
-int *m1 = &m;
-int *s1 = &s;
-int *day1= &day;
 int p1 = 12;
 int p2 = 13;
 int p3 = 14;  // do ustawienia 3 
-int tab[4];
+int tab[5];
 float i;
 
+Servo lapka;
+HX711_ADC LoadCell(HX711_dout, HX711_sck);
+LiquidCrystal_I2C lcd(PCF8574_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Strefa czasowa +1 (CEST), update co 60s
 
 
 
@@ -67,13 +64,13 @@ String twoDigits(int v) {
 }
 
 void waga_setup();
-bool waga_servo();
+bool waga_servo(float &i);
 void glosnik();
-void lapka_kota();
-void p2czyWcisniety();
-void p1czyWcisniety();
-void czas();
-void alarm_ustaw();
+void lapka_kota(int (&tab)[5], float i);
+void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia);
+void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia);
+void czas(int &h, int &m, int &s, int &day);
+void alarm_ustaw(int (&tab)[5]);
 void alaram_check();
 
 void setup() {
@@ -88,13 +85,9 @@ void setup() {
 }
 
 void loop() {
-  waga_servo();
-  czas();
-    if(p3wcisniecia==1)
-  {
-    alarm_ustaw();
-  };
-    alaram_check();
+  czas(h, m, s, day);
+    if(p3wcisniecia==1)  alaram_check();
+  if(waga_servo(i)==1)  lapka_kota(tab, i);
 }
 
 void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
@@ -103,24 +96,24 @@ void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
     if(p1wcisniecia==5){
       p1wcisniecia=0;
     }
-    p2wcisniecia==0;
+    p2wcisniecia=0;
     ostatnio1=true;
   }else if(digitalRead(p1)==LOW){
     ostatnio1=false;
   }
 }
 
-void p2czyWcisniety(int &p2wcisniecia){
+void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia){
   if((digitalRead(p2)==HIGH)&&(ostatnio2==false)){
     p2wcisniecia++;
     switch(p1wcisniecia)
     {
       case 1:
-      p2wcisniecia=24%p2wcisniecia;
+      p2wcisniecia=24%p2wcisniecia; break;
       case 2:
-      p2wcisniecia=60%p2wcisniecia;
+      p2wcisniecia=60%p2wcisniecia; break;
       case 3:
-      p2wcisniecia=60%p2wcisniecia;
+      p2wcisniecia=60%p2wcisniecia; break;
     }
     ostatnio2=true;
   }else if(digitalRead(p2)==LOW){
@@ -129,30 +122,62 @@ void p2czyWcisniety(int &p2wcisniecia){
 }
 
 
-void alarm_ustaw(int (&tab)[3])
+void alarm_ustaw(int (&tab)[5])
 {
-  p1czyWcisniety();
-  p2czyWcisniety();
-  tab[0]=tab[0]+*day1;
+  p1czyWcisniety(p1wcisniecia, p2wcisniecia);
+  p2czyWcisniety(p2wcisniecia, p1wcisniecia);
+  tab[0]=tab[0]+day;
   tab[p1wcisniecia-1]=p2wcisniecia;
-    if(tab[0]%7==0)   tab[0]==0;
-    if(tab[1]&24==0)  tab[0]=tab[0]+1;
+    if(tab[0]%7==0)   tab[0]=0;
+    if(tab[1]%24==0)  tab[0]=tab[0]+1;
     if(tab[2]%60==0)  tab[1]=tab[1]+1;
     if(tab[3]%60==0)  tab[2]=tab[2]+1;
 }
 void alaram_check()
 {
-
-  if((tab[0]==*day1)&&(tab[1]==*h1)&&(tab[2]==*m1)&&(tab[3]==*s1))
+  alarm_ustaw(tab);
+  if((tab[0]==day)&&(tab[1]==h)&&(tab[2]==m)&&(tab[3]==s))
   {
-    while(tab[4]>=0)
+    while(tab[4]<=0)
     {
       glosnik();
     }
   }
 }
 
-void czas(int h, int m, int s, int day)
+bool waga_servo(float &i)
+{
+     if (LoadCell.update()){
+      i = LoadCell.getData(); 
+      delay(500);
+      return true;
+     }else{
+      return false;
+     }
+}
+void lapka_kota(int (&tab)[5], float i)
+{
+  lapka.write(0); // ustawia servo na 0(stopni)
+  do{
+  lapka.write(180); //ustawia servo na 180(stopni)
+  delay(1000);
+  }while(waga_servo(i)==0); // i trzyma go na 180 aż HX711 przestanie przeysłać dane
+  lapka.write(0); // ponownie na 0
+  tab[4]=tab[4]-5;
+}
+
+void waga_setup()
+{
+  LoadCell.begin();
+    float calibration; 
+    calibration = 696.0;  // mnożnik napięcia na masę (do zmienienie ewentualnie)
+    unsigned long stabbilization = 2000;  // ile program czeka na stabylizajce mostka
+    boolean _tare = true;  // po włączeniu waga ustawia się na masę zero i po tym mierzy dopiero
+    LoadCell.start(stabbilization, _tare);  //włączenie mierzenia
+    LoadCell.setCalFactor(calibration);  // włączenie mnożnika
+}
+
+void czas(int &h, int &m, int &s, int &day)
 {
   timeClient.update();
   h = timeClient.getHours();
@@ -173,61 +198,8 @@ void czas(int h, int m, int s, int day)
   lcd.print(days[day]); // day jako int
 }
 
-bool waga_servo(float &i)
-{
-     if (LoadCell.update()){
-      i = LoadCell.getData(); 
-      return true;
-      delay(500);
-     }else{
-      return false;
-     }
-}
-void lapka_kota(int (&tab)[3])
-{
-  lapka.write(0); // ustawia servo na 0(stopni)
-  do{
-  lapka.write(180); //ustawia servo na 180(stopni)
-  delay(1000);
-  }while(waga_servo()==0); // i trzyma go na 180 aż HX711 przestanie przeysłać dane
-  lapka.write(0); // ponownie na 0
-  tab[4]=tab[4]-5;
-}
-
-void waga_setup()
-{
-  LoadCell.begin();
-    float calibration; 
-    calibration = 696.0;  // mnożnik napięcia na masę (do zmienienie ewentualnie)
-    unsigned long stabbilization = 2000;  // ile program czeka na stabylizajce mostka
-    boolean _tare = true;  // po włączeniu waga ustawia się na masę zero i po tym mierzy dopiero
-    LoadCell.start(stabbilization, _tare);  //włączenie mierzenia
-    LoadCell.setCalFactor(calibration);  // włączenie mnożnika
-}
 
 // głośnik ->
-    int tempo = 140;
-    int glosnik_in = 11;
-  
-  int notes = sizeof(melody) / sizeof(melody[0]) / 2;
-  int wholenote = (60000 * 4) / tempo;
-  int divider = 0, noteDuration = 0;
-
-  void glosnik(){
-    for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
-      divider = melody[thisNote + 1];
-    if (divider > 0) {
-      noteDuration = (wholenote) / divider;
-    } else if (divider < 0) {
-      noteDuration = (wholenote) / abs(divider);
-      noteDuration *= 1.5; 
-    }
-     tone(glosnik_in , melody[thisNote], noteDuration * 0.9);
-     delay(noteDuration);
-     noTone(glosnik_in);
-}
-}
-
 // definicja nut
 #define NOTE_B0  31
 #define NOTE_C1  33
@@ -385,3 +357,24 @@ void waga_setup()
   NOTE_D5,4, NOTE_G5,4, NOTE_E5,4,
   NOTE_F5,2, REST,4
     };
+        int tempo = 140;
+    int glosnik_in = 11;
+  
+  int notes = sizeof(melody) / sizeof(melody[0]) / 2;
+  int wholenote = (60000 * 4) / tempo;
+  int divider = 0, noteDuration = 0;
+
+  void glosnik(){
+    for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
+      divider = melody[thisNote + 1];
+    if (divider > 0) {
+      noteDuration = (wholenote) / divider;
+    } else if (divider < 0) {
+      noteDuration = (wholenote) / abs(divider);
+      noteDuration *= 1.5; 
+    }
+     tone(glosnik_in , melody[thisNote], noteDuration * 0.9);
+     delay(noteDuration);
+     noTone(glosnik_in);
+}
+}
