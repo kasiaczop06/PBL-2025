@@ -20,13 +20,14 @@ const char* ssid = "iPhone (Kasia)";
 const char* password = "kasiakasia1357";
 unsigned long t = 0;
 int p1wcisniecia=0, p2wcisniecia =0;
-bool p3wcisniecia =0;
-bool ostatnio1=0, ostatnio2=0, ostatnio3 =0;
+bool p3wcisnięty =0; 
+bool ostatnio1=0, ostatnio2=0;
 int h, m, s, day;
 int p1 = 12;
 int p2 = 13;
-int p3 = 14;  // do ustawienia 3 
-int tab[5];
+int p3_in = 14; 
+int p3_out = 15; // do ustawienia 3 
+int tab[5]; // tab{dzień, godzina, minuta, sekundy, ilość pieniędzy do uzbierania}
 float i;
 
 Servo lapka;
@@ -36,64 +37,49 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Strefa czasowa +1 (CEST), update co 60s
 
 
-
-void lcd_setup(){ // do testu 
-    lcd.setCursor(0, 0);
-    lcd.print(F("00:00")); // print(F()) nie wrzuca wartości do pamięci ramu 
-    delay(1000);
-    lcd.setCursor(0, 1);
-    lcd.print(F("00:00"));
-    delay(1000);
-}
-
-void waga_lcd_wypisz(){ // do testu
-  const int f = 500;  // częstotliwość  przeysłania 
-    if (LoadCell.update()&&(millis() > t + f)) { //LoadCell.update() - sprawdza czy HX711 posiada nowe informacje do oczytu a reszta to mini zegar
-      float i = LoadCell.getData(); // 
-      lcd.setCursor(8, 0);
-      lcd.print(F("waga:"));
-      lcd.setCursor(8, 1);
-      lcd.print(i, 2); // wypisanie masy z dokładnością 2 miejsc po przecinku
-      t = millis(); // resetuje t 
-    }
-    delay(1000);
-}
-
 String twoDigits(int v) {
   return (v < 10) ? "0" + String(v) : String(v); // zmienia czad godziny i minuty w wersje 0X kiedy X jest jednocyfrowy
 }
 
-void waga_setup();
+void waga_setup(); 
 bool waga_servo(float &i);
 void glosnik();
-void lapka_kota(int (&tab)[5], float i);
-void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia);
+void lapka_kota(int (&tab)[5]);
+void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia);
 void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia);
+bool p3czyWcisniety();
 void czas(int &h, int &m, int &s, int &day);
-int alarm_ustaw(int (&tab)[5]);
+void alarm_ustaw(int (&tab)[5]);
 void alaram_check();
+void alarm_wys();
 
 void setup() {
   Wire.begin();
   lcd.begin(COLUMNS, ROWS, LCD_5x8DOTS);
   lapka.attach(servo_in);
   Serial.begin(115200);
+  p3wcisnięty =0; 
   pinMode(p1,INPUT);
   pinMode(p2,INPUT);
-  pinMode(p3,INPUT);
+  pinMode(p3_in,INPUT);
+  pinMode(p3_out,OUTPUT);
   waga_setup();
+  lcd.setCursor(0, 1);
+  lcd.print(F("Alarm: 00:00")); 
+  tab[0]=tab[0]+day;
 }
 
 void loop() {
   czas(h, m, s, day);
-    if(p3wcisniecia==1)  alaram_check();
-  if(waga_servo(i)==1)  lapka_kota(tab, i);
+  if(p3czyWcisniety()==1)  alarm_ustaw(tab);
+  if(p3czyWcisniety()==0) alaram_check();
+  if(waga_servo(i)==1)  lapka_kota(tab);
 }
 
 void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
   if((digitalRead(p1)==HIGH)&&(ostatnio1==false)){
     p1wcisniecia++;
-    if(p1wcisniecia==5){
+    if(p1wcisniecia==6){
       p1wcisniecia=0;
     }
     p2wcisniecia=0;
@@ -101,51 +87,78 @@ void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
   }else if(digitalRead(p1)==LOW){
     ostatnio1=false;
   }
+  delay(500);
 }
 
-void p2czyWcisniety(int &p2wcisniecia, int p1wcisniecia){
+void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
   if((digitalRead(p2)==HIGH)&&(ostatnio2==false)){
     p2wcisniecia++;
     switch(p1wcisniecia)
     {
       case 1:
-      p2wcisniecia %24; break;
+      p2wcisniecia=p2wcisniecia %24; break;
       case 2:
-      p2wcisniecia %60; break;
       case 3:
-      p2wcisniecia %60; break;
+      p2wcisniecia=p2wcisniecia %60; break;
     }
     ostatnio2=true;
   }else if(digitalRead(p2)==LOW){
     ostatnio2=false;
   }
+  delay(500);
 }
 
+bool p3czyWcisniety()
+{
+  if(digitalRead(p3_in)==LOW){
+    if(p3wcisnięty==0){
+      digitalWrite(p3_out, HIGH);
+      p3wcisnięty=1;
+      return p3wcisnięty;
+    }else{
+      digitalWrite(p3_out, LOW);
+      p3wcisnięty=0;
+      return p3wcisnięty;
+    }
+    delay(500);
+  }
 
-int alarm_ustaw(int (&tab)[5])
+}
+
+void alarm_ustaw(int (&tab)[5])
 {
   p1czyWcisniety(p1wcisniecia, p2wcisniecia);
   p2czyWcisniety(p2wcisniecia, p1wcisniecia);
-  tab[0]=tab[0]+day;
   if(p1wcisniecia>0){
   tab[p1wcisniecia-1]=p2wcisniecia;
     if(tab[0]>=7)   tab[0]=0;
-    if(tab[1]>=24)  tab[0]=tab[0]+1;
-    if(tab[2]>=60)  tab[1]=tab[1]+1;
-    if(tab[3]>=60)  tab[2]=tab[2]+1;
+    if(tab[1]>=24)  tab[0]++, tab[1]=0;
+    if(tab[2]>=60)  tab[1]++, tab[2]=0;
+    if(tab[3]>=60)  tab[2]++, tab[3]=0;
+    alarm_wys();
   }
-    return tab[4];
+
 }
+
 void alaram_check()
 {
-  int temp=alarm_ustaw(tab);
   if((tab[0]==day)&&(tab[1]==h)&&(tab[2]==m)&&(tab[3]==s))
   {
-    while(temp<=0)
+    while(tab[4]<=0)
     {
       glosnik();
     }
   }
+}
+
+void alarm_wys()
+{
+  lcd.setCursor(7, 1);
+  lcd.print(tab[1]);
+  lcd.setCursor(10, 1);
+  lcd.print(tab[2]);
+  lcd.setCursor(13, 1);
+  lcd.print(tab[3]);
 }
 
 bool waga_servo(float &i)
@@ -158,7 +171,8 @@ bool waga_servo(float &i)
       return false;
      }
 }
-void lapka_kota(int (&tab)[5], float i)
+
+void lapka_kota(int (&tab)[5])
 {
   lapka.write(0); // ustawia servo na 0(stopni)
   do{
@@ -194,10 +208,10 @@ void czas(int &h, int &m, int &s, int &day)
 
 
   day = timeClient.getDay(); // Dzień tygodnia (0-6)
-  lcd.setCursor(0, 1);
+  lcd.setCursor(0, 2);
   lcd.print("Dzien: ");
   const char* days[] = {"Nd","Pon","Wt","Sr","Cz","Pt","So"};
-  lcd.setCursor(7, 1);
+  lcd.setCursor(7, 2);
   lcd.print(days[day]); // day jako int
 }
 
@@ -382,3 +396,24 @@ void czas(int &h, int &m, int &s, int &day)
 }
 }
 
+void lcd_setup(){ // do testu 
+    lcd.setCursor(0, 0);
+    lcd.print(F("00:00")); // print(F()) nie wrzuca wartości do pamięci ramu 
+    delay(1000);
+    lcd.setCursor(0, 1);
+    lcd.print(F("00:00"));
+    delay(1000);
+}
+
+void waga_lcd_wypisz(){ // do testu
+  const int f = 500;  // częstotliwość  przeysłania 
+    if (LoadCell.update()&&(millis() > t + f)) { //LoadCell.update() - sprawdza czy HX711 posiada nowe informacje do oczytu a reszta to mini zegar
+      float i = LoadCell.getData(); // 
+      lcd.setCursor(8, 0);
+      lcd.print(F("waga:"));
+      lcd.setCursor(8, 1);
+      lcd.print(i, 2); // wypisanie masy z dokładnością 2 miejsc po przecinku
+      t = millis(); // resetuje t 
+    }
+    delay(1000);
+}
