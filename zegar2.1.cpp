@@ -18,9 +18,11 @@ const char* ssid = "iPhone (Kasia)";
 const char* password = "kasiakasia1357";
 unsigned long t = 0;
 unsigned long last = 0;
+unsigned long alarm_czas = 0;
 int p1wcisniecia=0, p2wcisniecia =0;
 bool p3wcisniety =0; 
 bool ostatnio1=0, ostatnio2=0;
+bool alarmActive = false;
 int w;
 int p1 = 12;
 int p2 = 13;
@@ -73,10 +75,12 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - last < 1000) return;
+  if (millis() - last < 1000) {
   last = millis();
   czas(w);
+  }
   tab[0]=w;
+  p3czyWcisniety(p3wcisniety);
   if(p3wcisniety==1)  alarm_ustaw(tab);
 }
 
@@ -128,6 +132,7 @@ void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
 
 void p3czyWcisniety(bool &p3wcisniety)
 {
+  bool lastP3State=digitalRead(p3_in);  
   if(digitalRead(p3_in)==LOW){
     if(p3wcisniety==0){
       digitalWrite(p3_out, HIGH);
@@ -261,13 +266,13 @@ void czas(int &w)
     if(p3wcisniety==0){
     if((tab[0]==tm->tm_mday)&&(tab[1]==tm->tm_hour)&&(tab[2]==tm->tm_min)&&(tab[3]==tm->tm_sec))
   {
-    if(tab[4]>=0)
-    {
-      while(tab[4]>=0){
-      glosnik();
-      }
-    }
+    if(tab[4]>=0)  alarmActive = true;
   }
+    if(alarmActive && millis() - alarm_czas > 500){ 
+    glosnik();
+    alarm_czas = millis();
+    if(tab[4] <= 0) alarmActive = false;
+}
   }
 }
 else {
