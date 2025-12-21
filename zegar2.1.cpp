@@ -131,8 +131,7 @@ void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
 }
 
 void p3czyWcisniety(bool &p3wcisniety)
-{
-  bool lastP3State=digitalRead(p3_in);  
+{  
   if(digitalRead(p3_in)==LOW){
     if(p3wcisniety==0){
       digitalWrite(p3_out, HIGH);
