@@ -20,7 +20,7 @@ const char* password = "kasiakasia1357";
 unsigned long t = 0;
 unsigned long last = 0;
 int p1wcisniecia=0, p2wcisniecia =0;
-bool p3wcisnięty =0; 
+bool p3wcisniety =0; 
 bool ostatnio1=0, ostatnio2=0;
 int w;
 int p1 = 12;
@@ -70,7 +70,7 @@ void setup() {
   lapka.attach(servo_in);
 
   printLine(0, 1, "Alarm: 00:00");
-  p3wcisnięty =0;
+  p3wcisniety =0;
 }
 
 void loop() {
@@ -78,7 +78,7 @@ void loop() {
   last = millis();
   czas(w);
   tab[0]=w;
-  if(p3wcisnięty==1)  alarm_ustaw(tab);
+  if(p3wcisniety==1)  alarm_ustaw(tab);
   if(waga_servo(i)==1)  lapka_kota(tab);
 }
 
@@ -90,8 +90,8 @@ WiFi.begin(ssid, password);
   }
   if(WiFi.status() == WL_CONNECTED){
     Serial.print("Połączono, IP: ");
-    timeClient.update();
     timeClient.begin();
+    timeClient.update();
   }else{
     Serial.print("nie połączono się");
   }
@@ -109,7 +109,6 @@ void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
   }else if(digitalRead(p1)==LOW){
     ostatnio1=false;
   }
-  delay(500);
 }
 
 void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
@@ -127,20 +126,18 @@ void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
   }else if(digitalRead(p2)==LOW){
     ostatnio2=false;
   }
-  delay(500);
 }
 
-void p3czyWcisniety(bool &p3wcisnięty)
+void p3czyWcisniety(bool &p3wcisniety)
 {
   if(digitalRead(p3_in)==LOW){
-    if(p3wcisnięty==0){
+    if(p3wcisniety==0){
       digitalWrite(p3_out, HIGH);
-      p3wcisnięty=1;
+      p3wcisniety=1;
     }else{
       digitalWrite(p3_out, LOW);
-      p3wcisnięty=0;
+      p3wcisniety=0;
     }
-    delay(500);
   }
 
 }
@@ -151,10 +148,10 @@ void alarm_ustaw(int (&tab)[5])
   p2czyWcisniety(p2wcisniecia, p1wcisniecia);
   if(p1wcisniecia>0){
   tab[p1wcisniecia-1]=p2wcisniecia;
-    if(tab[0]>=7)   tab[0]=0;
-    if(tab[1]>=24)  tab[0]++, tab[1]=0;
-    if(tab[2]>=60)  tab[1]++, tab[2]=0;
-    if(tab[3]>=60)  tab[2]++, tab[3]=0;
+    if(tab[0]>=7)   {tab[0]=0;}
+    if(tab[1]>=24)  {tab[0]++; tab[1]=0;}
+    if(tab[2]>=60)  {tab[1]++; tab[2]=0;}
+    if(tab[3]>=60)  {tab[2]++; tab[3]=0;}
     alarm_wys();
   }
 
@@ -188,7 +185,6 @@ bool waga_servo(float &i)
 {
      if (LoadCell.update()){
       i = LoadCell.getData(); 
-      delay(500);
       return true;
      }else{
       return false;
@@ -201,8 +197,7 @@ void lapka_kota(int (&tab)[5])
   unsigned long ze = millis();
   while(!waga_servo(i)){ // i trzyma go na 180 aż HX711 przestanie przeysłać dane
   lapka.write(180); //ustawia servo na 180(stopni)
-  delay(500);
-  if(millis()-ze >5000) break;
+  if(millis()-ze >2500) break;
   } 
 
   lapka.write(0); // ponownie na 0
@@ -242,7 +237,7 @@ void czas(int &w)
            tm->tm_mon + 1,
            tm->tm_year + 1900);
 
-  int w = tm->tm_wday;
+    w = tm->tm_wday;
   if (w >= 0 && w <= 6)
     dayBuf = (const char*[7]){
       "Niedziela","Poniedzialek","Wtorek",
@@ -264,7 +259,7 @@ void czas(int &w)
     lcd.setCursor(0, 2); lcd.print(dayBuf);
     lcd.setCursor(10, 2); lcd.print(dateBuf);
     lcd.setCursor(0, 0); lcd.print("====================");
-    if(p3wcisnięty==0){
+    if(p3wcisniety==0){
     if((tab[0]==tm->tm_mday)&&(tab[1]==tm->tm_hour)&&(tab[2]==tm->tm_min)&&(tab[3]==tm->tm_sec))
   {
     if(tab[4]>=0)
