@@ -1,60 +1,166 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <Wire.h>
-#include <NTPClient.h>
 #include <WiFiUdp.h>
-#include <LiquidCrystal_I2C.h> // Biblioteka dla wyświetlacza I2C
+#include <NTPClient.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// Prosty program: wyświetla ===== separatory w 1 i 4 linii,
+// 2 linia = godzina HH:MM:SS, 3 linia = dzień tygodnia (skrót)
+
 #define COLUMNS 20
-#define ROWS 4
-#pragma GCC optimize ("03")
-// Konfiguracja WiFi
-const char* ssid = "iPhone (Kasia)";
-const char* password = "kasiakasia1357";
+#define ROWS    4
+#define SDA_PIN 21
+#define SCL_PIN 22
+#define LED_PIN 33
 
-// Konfiguracja NTP
+// Godzina alarmu (ustawiasz w kodzie)
+int alarmHour = 17;
+int alarmMinute = 7;
+int alarmSecond = 45;
+
+bool alarmActive = false;
+unsigned long lastBlink = 0;
+bool ledState = false;
+const char* ssid = "vault05";            // wpisz swoją sieć
+const char* password = "AbsurdalnyFotel22"; // wpisz swoje hasło
+const long utcOffsetSeconds = 3600;        // przesunięcie strefy czasowej (PL zwykle 3600)
+
+LiquidCrystal_I2C *lcd;
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Strefa czasowa +1 (CEST), update co 60s
- // adres 0x27 (poprawny typ: pcf8574Address)
-// Inicjalizacja LCD (adres i rozmiar, np. 16x2)
-LiquidCrystal_I2C lcd(PCF8574_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
+NTPClient timeClient(ntpUDP, "pool.ntp.org", utcOffsetSeconds, 60000);
 
+// Pomocnicze funkcje (proste i czytelne)
+void printLine(int row, const String &text) {
+  // wyświetla tekst i dopełnia spacje do końca linii
+  lcd->setCursor(0, row);
+  String s = text;
+  while (s.length() < COLUMNS) s += ' ';
+  lcd->print(s);
+}
 
+String centerText(const String &txt) {
+  // zwraca tekst wyśrodkowany w szerokości COLUMNS
+  int pad = (COLUMNS - (int)txt.length()) / 2;
+  String s = "";
+  for (int i = 0; i < pad; ++i) s += ' ';
+  s += txt;
+  while (s.length() < COLUMNS) s += ' ';
+  return s;
+}
+
+String weekdayShort(struct tm *t) {
+  const char* days[] = {"Nie","Pon","Wto","Sro","Czw","Pia","Sob"};
+  if (!t) return "---";
+  int w = t->tm_wday; // 0 = niedziela
+  if (w < 0 || w > 6) return "---";
+  return String(days[w]);
+}
 
 void setup() {
   Serial.begin(115200);
-  Wire.begin(); // lub Wire.begin(21, 22) jeśli używasz innych pinów
-  Serial.println("I2C scanner");
-  for (uint8_t addr = 1; addr < 127; ++addr) {
-    Wire.beginTransmission(addr);
-    if (Wire.endTransmission() == 0) {
-      Serial.print("Found I2C device at 0x");
-      Serial.println(addr, HEX);
-    }
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  lcd = new LiquidCrystal_I2C(static_cast<pcf8574Address>(0x27));
+  lcd->begin(COLUMNS, ROWS);
+  lcd->backlight();
+  lcd->clear();
+  printLine(0, "Ładowanie...");
+
+  // Połącz z WiFi
+  WiFi.begin(ssid, password);
+  int tries = 0;
+  while (WiFi.status() != WL_CONNECTED && tries < 30) {
+    delay(500);
+    Serial.print('.');
+    ++tries;
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Połączono, IP: "); Serial.println(WiFi.localIP());
+    timeClient.begin();
+    timeClient.update();
+  } else {
+    Serial.println("Brak połączenia WiFi");
   }
 }
 
-String twoDigits(int v) {
-  return (v < 10) ? "0" + String(v) : String(v);
-}
+unsigned long last = 0;
 
 void loop() {
-  timeClient.update();
-  int h = timeClient.getHours();
-  int m = timeClient.getMinutes();
-  int s = timeClient.getSeconds();
+  if (millis() - last < 1000) return; // aktualizuj co 1s
+  last = millis();
 
-  String line0 = "Czas: " + twoDigits(h) + ":" + twoDigits(m) + ":" + twoDigits(s);
-  while (line0.length() < COLUMNS) line0 += ' '; // dopasuj do 16 kolumn
-  lcd.setCursor(0, 0);
-  lcd.print(line0);
+  if (WiFi.status() == WL_CONNECTED) {
+    timeClient.update();
+    unsigned long epoch = timeClient.getEpochTime();
+    time_t rawtime = (time_t)epoch;
+    struct tm *tm = localtime(&rawtime);
 
+    char timeBuf[9] = "--:--:--";     // HH:MM:SS
+    char dateBuf[11] = "--/--/----"; // DD/MM/YYYY
+    const char* dayBuf = "---";
+    if (tm) {
+  snprintf(timeBuf, sizeof(timeBuf),
+           "%02d:%02d:%02d",
+           tm->tm_hour, tm->tm_min, tm->tm_sec);
 
+  snprintf(dateBuf, sizeof(dateBuf),
+           "%02d/%02d/%04d",
+           tm->tm_mday,
+           tm->tm_mon + 1,
+           tm->tm_year + 1900);
 
-  int day = timeClient.getDay(); // Dzień tygodnia (0-6)
-  lcd.setCursor(0, 1);
-  lcd.print(F("Dzien: "));
-  const char* days[] = {"Nd","Pon","Wt","Sr","Cz","Pt","So"};
-  lcd.setCursor(7, 1);
-  lcd.print(days[day]); // day jako int
-
+  int w = tm->tm_wday;
+  if (w >= 0 && w <= 6)
+    dayBuf = (const char*[7]){
+      "Niedziela","Poniedzialek","Wtorek",
+      "Sroda","Czwartek","Piatek","Sobota"
+    }[w];
 }
+
+
+    
+    
+    // Czyścimy ekran i piszemy prosto i na środku
+    lcd->clear();
+    char alarmBuf[9];
+    snprintf(alarmBuf, sizeof(alarmBuf), "%02d:%02d:%02d", alarmHour, alarmMinute, alarmSecond);
+    lcd->setCursor(0, 3); lcd->print("ALARM: "); lcd->print(alarmBuf);
+    lcd->setCursor((COLUMNS - 8) / 2, 1); lcd->print(timeBuf);
+    lcd->setCursor(0, 2); lcd->print(dayBuf);
+    lcd->setCursor(10, 2); lcd->print(dateBuf);
+    lcd->setCursor(0, 0); lcd->print("====================");
+
+    if (tm->tm_hour == alarmHour &&
+      tm->tm_min  == alarmMinute &&
+      tm->tm_sec  == alarmSecond) {
+    alarmActive = true;
+}
+
+  } else {
+    // brak WiFi
+    lcd->clear();
+    lcd->setCursor(5, 0); lcd->print("==========");
+    lcd->setCursor(4, 1); lcd->print("Brak WiFi");
+    lcd->setCursor(3, 2); lcd->print("Sprawdz siec");
+    lcd->setCursor(5, 3); lcd->print("==========");
+
+    WiFi.reconnect();
+  }
+
+    if (alarmActive) {
+    if (millis() - lastBlink > 500) { // miganie co 0.5s
+      lastBlink = millis();
+      ledState = !ledState;
+      digitalWrite(LED_PIN, ledState);
+    }
+    } else {
+    digitalWrite(LED_PIN, LOW);
+    }
+}
+
