@@ -4,12 +4,11 @@
 #include <Wire.h>
 #include <HX711_ADC.h>
 #include <Servo.h>
-#include "pitches.h"
 #include <WiFi.h>
 #include <Wire.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#pragma GCC optimize ("O3") // pszyspiesza kompilacje ale powoduje więcej błędów
+#pragma GCC optimize ("O3") // pszyspiesza kompilacje ale powoduje więcej błędów ewentualnie do usunięcia
 #define COLUMNS 20
 #define ROWS 4
 
@@ -47,15 +46,20 @@ void glosnik();
 void lapka_kota(int (&tab)[5]);
 void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia);
 void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia);
-bool p3czyWcisniety();
+void p3czyWcisniety();
 void czas(int &h, int &m, int &s, int &day);
 void alarm_ustaw(int (&tab)[5]);
-void alaram_check();
+void alarm_check();
 void alarm_wys();
 
 void setup() {
   Wire.begin();
   lcd.begin(COLUMNS, ROWS, LCD_5x8DOTS);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+  timeClient.begin();
   lapka.attach(servo_in);
   Serial.begin(115200);
   p3wcisnięty =0; 
@@ -66,13 +70,13 @@ void setup() {
   waga_setup();
   lcd.setCursor(0, 1);
   lcd.print(F("Alarm: 00:00")); 
-  tab[0]=tab[0]+day;
+  tab[0]=day;
 }
 
 void loop() {
   czas(h, m, s, day);
-  if(p3czyWcisniety()==1)  alarm_ustaw(tab);
-  if(p3czyWcisniety()==0) alaram_check();
+  if(p3wcisnięty==1)  alarm_ustaw(tab);
+  if(p3wcisnięty==0) alarm_check();
   if(waga_servo(i)==1)  lapka_kota(tab);
 }
 
@@ -108,17 +112,15 @@ void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
   delay(500);
 }
 
-bool p3czyWcisniety()
+void p3czyWcisniety(bool &p3wcisnięty)
 {
   if(digitalRead(p3_in)==LOW){
     if(p3wcisnięty==0){
       digitalWrite(p3_out, HIGH);
       p3wcisnięty=1;
-      return p3wcisnięty;
     }else{
       digitalWrite(p3_out, LOW);
       p3wcisnięty=0;
-      return p3wcisnięty;
     }
     delay(500);
   }
@@ -140,13 +142,15 @@ void alarm_ustaw(int (&tab)[5])
 
 }
 
-void alaram_check()
+void alarm_check()
 {
   if((tab[0]==day)&&(tab[1]==h)&&(tab[2]==m)&&(tab[3]==s))
   {
-    while(tab[4]<=0)
+    if(tab[4]>=0)
     {
+      while(tab[4]>=0){
       glosnik();
+      }
     }
   }
 }
@@ -175,10 +179,13 @@ bool waga_servo(float &i)
 void lapka_kota(int (&tab)[5])
 {
   lapka.write(0); // ustawia servo na 0(stopni)
-  do{
+  unsigned long ze = millis();
+  while(!waga_servo(i)){ // i trzyma go na 180 aż HX711 przestanie przeysłać dane
   lapka.write(180); //ustawia servo na 180(stopni)
-  delay(1000);
-  }while(waga_servo(i)==0); // i trzyma go na 180 aż HX711 przestanie przeysłać dane
+  delay(500);
+  if(millis()-ze >5000) break;
+  } 
+
   lapka.write(0); // ponownie na 0
   tab[4]=tab[4]-5;
 }
@@ -390,7 +397,7 @@ void czas(int &h, int &m, int &s, int &day)
       noteDuration = (wholenote) / abs(divider);
       noteDuration *= 1.5; 
     }
-     tone(glosnik_in , melody[thisNote], noteDuration * 0.9);
+     tone(glosnik_in , melody[thisNote], noteDuration * 0.9); // ewentualnie ledcWriteTone() jak przestanie działać w testach 
      delay(noteDuration);
      noTone(glosnik_in);
 }
