@@ -5,7 +5,6 @@
 #include <HX711_ADC.h>
 #include <Servo.h>
 #include <WiFi.h>
-#include <Wire.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #pragma GCC optimize ("O3") // pszyspiesza kompilacje ale powoduje więcej błędów ewentualnie do usunięcia
@@ -43,10 +42,10 @@ void glosnik();
 void lapka_kota(int (&tab)[5]);
 void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia);
 void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia);
-void p3czyWcisniety();
+void p3czyWcisniety(bool &p3wcisniety);
 void czas(int &w);
 void alarm_ustaw(int (&tab)[5]);
-void printLine(int row, int col, const String &text);
+void printLine_word(int row, int col, const String &text);
 void printLine_num(int row, int col, int v);
 void alarm_wys();
 void wifi();
@@ -69,7 +68,7 @@ void setup() {
   waga_setup();
   lapka.attach(servo_in);
 
-  printLine(0, 1, "Alarm: 00:00");
+  printLine_word(0, 1, "Alarm: 00:00");
   p3wcisniety =0;
 }
 
@@ -79,7 +78,6 @@ void loop() {
   czas(w);
   tab[0]=w;
   if(p3wcisniety==1)  alarm_ustaw(tab);
-  if(waga_servo(i)==1)  lapka_kota(tab);
 }
 
 void wifi()
@@ -259,6 +257,7 @@ void czas(int &w)
     lcd.setCursor(0, 2); lcd.print(dayBuf);
     lcd.setCursor(10, 2); lcd.print(dateBuf);
     lcd.setCursor(0, 0); lcd.print("====================");
+    if(waga_servo(i)==1)  {lapka_kota(tab);}
     if(p3wcisniety==0){
     if((tab[0]==tm->tm_mday)&&(tab[1]==tm->tm_hour)&&(tab[2]==tm->tm_min)&&(tab[3]==tm->tm_sec))
   {
