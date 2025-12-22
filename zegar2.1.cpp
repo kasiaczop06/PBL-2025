@@ -11,25 +11,29 @@
 #define COLUMNS 20
 #define ROWS 4
 
-const int servo_in=10; //połączenie servo
+int tempo = 140;
+int glosnik_in = 14;
+const int servo_in=13; //połączenie servo
 const int HX711_dout = 18; // połączenia wagi
 const int HX711_sck = 5; // połączenia wagi
-const char* ssid = "iPhone (Kasia)";
-const char* password = "kasiakasia1357";
+const char* ssid = "Xiaomi 11T Pro";
+const char* password = "rodaknieznany";
 unsigned long t = 0;
 unsigned long last = 0;
 unsigned long alarm_czas = 0;
+unsigned long l=millis();
 int p1wcisniecia=0, p2wcisniecia =0;
-bool p3wcisniety =0; 
+bool p3wcisniety = false;
 bool ostatnio1=0, ostatnio2=0;
-bool alarmActive = false;
 int w;
-int p1 = 12;
-int p2 = 13;
-int p3_in = 14; 
-int p3_out = 15; // do ustawienia 3 
+int p1 = 15;
+int p2 = 17;
+int p3_in = 4; 
+int p3_out = 16; // do ustawienia 3 
 int tab[5]; // tab{dzień, godzina, minuta, sekundy, ilość pieniędzy do uzbierania}
 float i;
+byte last1;
+byte last2 =LOW;
 
 Servo lapka;
 HX711_ADC LoadCell(HX711_dout, HX711_sck);
@@ -39,14 +43,14 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Strefa czasowa +1 
 
 
 void waga_setup(); 
-bool waga_servo(float &i);
+bool waga_servo();
 void glosnik();
-void lapka_kota(int (&tab)[5]);
-void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia);
-void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia);
-void p3czyWcisniety(bool &p3wcisniety);
-void czas(int &w);
-void alarm_ustaw(int (&tab)[5]);
+void lapka_kota();
+void p2czyWcisniety();
+void p1czyWcisniety();
+void p3czyWcisniety();
+void czas();
+void alarm_ustaw();
 void printLine_word(int row, int col, const String &text);
 void printLine_num(int row, int col, int v);
 void alarm_wys();
@@ -67,21 +71,25 @@ void setup() {
   pinMode(p3_in,INPUT);
   pinMode(p3_out,OUTPUT);
 
+
   waga_setup();
   lapka.attach(servo_in);
 
-  printLine_word(0, 1, "Alarm: 00:00");
-  p3wcisniety =0;
+  p1wcisniecia=0;
+  p2wcisniecia=0;
+  last1 =  digitalRead(p3_in);
+  printLine_word(0, 0, "do uzbierania:");
 }
 
 void loop() {
-  if (millis() - last < 1000) {
+  if (millis() - last >= 1000) {
   last = millis();
-  czas(w);
+  czas();
   }
   tab[0]=w;
-  p3czyWcisniety(p3wcisniety);
-  if(p3wcisniety==1)  alarm_ustaw(tab);
+  p3czyWcisniety();
+  if(digitalRead(p3_out)==HIGH) alarm_ustaw();
+  //alarm_wys();
 }
 
 void wifi()
@@ -100,11 +108,11 @@ WiFi.begin(ssid, password);
 }
 
 
-void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
+void p1czyWcisniety() {
   if((digitalRead(p1)==HIGH)&&(ostatnio1==false)){
     p1wcisniecia++;
     if(p1wcisniecia==6){
-      p1wcisniecia=0;
+      p1wcisniecia=1;
     }
     p2wcisniecia=0;
     ostatnio1=true;
@@ -113,7 +121,7 @@ void p1czyWcisniety(int &p1wcisniecia, int &p2wcisniecia) {
   }
 }
 
-void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
+void p2czyWcisniety(){
   if((digitalRead(p2)==HIGH)&&(ostatnio2==false)){
     p2wcisniecia++;
     switch(p1wcisniecia)
@@ -130,31 +138,35 @@ void p2czyWcisniety(int &p2wcisniecia, int &p1wcisniecia){
   }
 }
 
-void p3czyWcisniety(bool &p3wcisniety)
-{  
-  if(digitalRead(p3_in)==LOW){
-    if(p3wcisniety==0){
-      digitalWrite(p3_out, HIGH);
-      p3wcisniety=1;
-    }else{
-      digitalWrite(p3_out, LOW);
-      p3wcisniety=0;
+void p3czyWcisniety()
+{
+  if(millis() - l >=50 ){
+  byte buttonstate = digitalRead(p3_in);
+  if(buttonstate != last1){
+    l = millis();
+    last1 = buttonstate;
+    if(buttonstate == LOW){
+      if(last2 ==HIGH){
+        last2 =LOW;
+      } else{
+            last2=HIGH;
+      }
+      digitalWrite(p3_out, last2);
     }
   }
-
+}
 }
 
-void alarm_ustaw(int (&tab)[5])
+void alarm_ustaw()
 {
-  p1czyWcisniety(p1wcisniecia, p2wcisniecia);
-  p2czyWcisniety(p2wcisniecia, p1wcisniecia);
-  if(p1wcisniecia>0){
+  p1czyWcisniety();
+  p2czyWcisniety();
+  if(p1wcisniecia>=1 && p1wcisniecia <=5){
   tab[p1wcisniecia-1]=p2wcisniecia;
-    if(tab[0]>=7)   {tab[0]=0;}
-    if(tab[1]>=24)  {tab[0]++; tab[1]=0;}
-    if(tab[2]>=60)  {tab[1]++; tab[2]=0;}
     if(tab[3]>=60)  {tab[2]++; tab[3]=0;}
-    alarm_wys();
+    if(tab[2]>=60)  {tab[1]++; tab[2]=0;}
+    if(tab[1]>=24)  {tab[0]++; tab[1]=0;}
+    if(tab[0]>=7)   {tab[0]=0;}
   }
 
 }
@@ -162,14 +174,20 @@ void alarm_ustaw(int (&tab)[5])
 
 void alarm_wys()
 {
-  printLine_num(7, 1, tab[1]);
-  printLine_num(10, 1, tab[2]);
-  printLine_num(13, 1, tab[3]);
+  printLine_word(0, 0, "do uzbierania:");
+  printLine_num(16, 0, tab[4]);
+  printLine_num(7, 3, tab[0]);
+  printLine_word(9, 3, ":");
+  printLine_num(10, 3, tab[1]);
+  printLine_word(12, 3, ":");
+  printLine_num(13, 3, tab[2]);
+  printLine_word(15, 3, ":");
+  printLine_num(16, 3, tab[3]);
 }
 
 void printLine_word(int row,int col, const String &text) {
   // wyświetla tekst i dopełnia spacje do końca linii
-  lcd.setCursor(col, row);
+  lcd.setCursor(row, col);
   String s = text;
   while (s.length() < COLUMNS) s += ' ';
   lcd.print(s);
@@ -177,7 +195,7 @@ void printLine_word(int row,int col, const String &text) {
 
 void printLine_num(int row, int col, int v) {
   // wyświetla tekst i dopełnia spacje do końca linii
-  lcd.setCursor(col, row);
+  lcd.setCursor(row, col);
   if(v<10){
     lcd.print("0");
   }
@@ -193,7 +211,7 @@ bool waga_servo(float &i)
      }
 }
 
-void lapka_kota(int (&tab)[5])
+void lapka_kota()
 {
   lapka.write(0); // ustawia servo na 0(stopni)
   unsigned long ze = millis();
@@ -203,12 +221,14 @@ void lapka_kota(int (&tab)[5])
   } 
 
   lapka.write(0); // ponownie na 0
+  if(i>=4.5 && i<=5.5)
   tab[4]=tab[4]-5;
 }
 
 void waga_setup()
 {
-  LoadCell.begin();
+    LoadCell.begin();
+    LoadCell.setSamplesInUse(10);
     float calibration; 
     calibration = 696.0;  // mnożnik napięcia na masę (do zmienienie ewentualnie)
     unsigned long stabbilization = 2000;  // ile program czeka na stabylizajce mostka
@@ -217,7 +237,7 @@ void waga_setup()
     LoadCell.setCalFactor(calibration);  // włączenie mnożnika
 }
 
-void czas(int &w)
+void czas()
 {
   if (WiFi.status() == WL_CONNECTED) {
     timeClient.update();
@@ -225,8 +245,8 @@ void czas(int &w)
     time_t rawtime = (time_t)epoch;
     struct tm *tm = localtime(&rawtime);
 
-    char timeBuf[9] = "--:--:--";     // HH:MM:SS
-    char dateBuf[11] = "--/--/----"; // DD/MM/YYYY
+    char timeBuf[9];     // HH:MM:SS
+    char dateBuf[11]; // DD/MM/YYYY
     const char* dayBuf = "---";
     if (tm) {
   snprintf(timeBuf, sizeof(timeBuf),
@@ -251,28 +271,29 @@ void czas(int &w)
     
     
     // Czyścimy ekran i piszemy prosto i na środku
-    lcd.clear();
-    char alarmBuf[9];
+    char alarmBuf[13];
     snprintf(alarmBuf, sizeof(alarmBuf), 
-              "%02d:%02d:%02d", 
-              tab[1], tab[2], tab[3]);
-    printLine_word(0, 3, "ALARM: "); lcd.print(alarmBuf);
+              "%02d:%02d:%02d:%02d", 
+              tab[0],tab[1], tab[2], tab[3]);
+    printLine_num(16, 0, tab[4]);
+    printLine_word(0, 3, "ALARM: "); 
+    lcd.setCursor(6, 3);  lcd.print(alarmBuf);
     lcd.setCursor((COLUMNS - 8) / 2, 1); lcd.print(timeBuf);
     lcd.setCursor(0, 2); lcd.print(dayBuf);
     lcd.setCursor(10, 2); lcd.print(dateBuf);
-    lcd.setCursor(0, 0); lcd.print("====================");
-    if(waga_servo(i)==1)  {lapka_kota(tab);}
-    if(p3wcisniety==0){
-    if((tab[0]==tm->tm_mday)&&(tab[1]==tm->tm_hour)&&(tab[2]==tm->tm_min)&&(tab[3]==tm->tm_sec))
-  {
-    if(tab[4]>=0)  alarmActive = true;
-  }
-    if(alarmActive && millis() - alarm_czas > 500){ 
-    glosnik();
-    alarm_czas = millis();
-    if(tab[4] <= 0) alarmActive = false;
-}
-  }
+
+    if(waga_servo(i)==1)  {lapka_kota();}
+    if(digitalRead(p3_out)==LOW){
+      if((tab[0]<=tm->tm_mday)&&(tab[1]<=tm->tm_hour)&&(tab[2]<=tm->tm_min)&&(tab[3]<=tm->tm_sec))
+    {
+        if(tab[4]>=0)  {p3wcisniety = true;}
+      }
+        if((p3wcisniety ==true) && millis() - alarm_czas > 500){ 
+            alarm_czas = millis();
+            glosnik();
+             if(tab[4] <= 0) p3wcisniety = false;
+          }
+    }
 }
 else {
     // brak WiFi
@@ -289,7 +310,7 @@ else {
 
 // głośnik ->
 // definicja nut
-#define NOTE_B0  31
+#define NOTE_B0  31   
 #define NOTE_C1  33
 #define NOTE_CS1 35
 #define NOTE_D1  37
@@ -445,8 +466,6 @@ else {
   NOTE_D5,4, NOTE_G5,4, NOTE_E5,4,
   NOTE_F5,2, REST,4
     };
-        int tempo = 140;
-    int glosnik_in = 11;
   
   int notes = sizeof(melody) / sizeof(melody[0]) / 2;
   int wholenote = (60000 * 4) / tempo;
@@ -467,14 +486,6 @@ else {
 }
 }
 
-void lcd_setup(){ // do testu 
-    lcd.setCursor(0, 0);
-    lcd.print(F("00:00")); // print(F()) nie wrzuca wartości do pamięci ramu 
-    delay(1000);
-    lcd.setCursor(0, 1);
-    lcd.print(F("00:00"));
-    delay(1000);
-}
 
 void waga_lcd_wypisz(){ // do testu
   const int f = 500;  // częstotliwość  przeysłania 
