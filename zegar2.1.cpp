@@ -267,7 +267,7 @@ void spr_alarm(){
     if(digitalRead(p3_out)==LOW){
       if((tab[0]<=tm->tm_mday)&&(tab[1]<=tm->tm_hour)&&(tab[2]<=tm->tm_min))
     {
-        if(tab[4]<=0){
+        if(tab[4]<=i){
           //glosnik();
           Serial.println("alarm");
         }
