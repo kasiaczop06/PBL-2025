@@ -1,3 +1,4 @@
+//git push -u origin master dla git huba
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
@@ -6,7 +7,7 @@
 #include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
-#pragma GCC optimize ("O3") // pszyspiesza kompilacje ale powoduje więcej błędów ewentualnie do usunięcia
+//#pragma GCC optimize ("O3") // pszyspiesza kompilacje ale powoduje więcej błędów ewentualnie do usunięcia
 #define COLUMNS 20
 #define ROWS 4
 
@@ -24,6 +25,7 @@ const char* ssid = "Xiaomi 11T Pro";
 const char* password = "rodaknieznany";
 unsigned long t = 0;
 unsigned long last = 0;
+unsigned long last3=0;
 unsigned long alarm_czas = 0;
 unsigned long l=millis();
 int p1wcisniecia=0, p2wcisniecia =0;
@@ -87,7 +89,6 @@ void setup() {
   p1wcisniecia=0;
   p2wcisniecia=0;
   last1 =  digitalRead(p3_in);
-  printLine_word(0, 0, "do uzbierania:");
 }
 
 void loop() {
@@ -99,8 +100,22 @@ void loop() {
   }
   }
   p3czyWcisniety();
-  if(digitalRead(p3_out)==HIGH) {alarm_ustaw();}
-  wys_czas();
+
+  if(millis()-last3 >=100){
+    last3 = millis();
+    wys_czas();
+    if(digitalRead(p3_out)==HIGH) {
+    alarm_ustaw();
+    printLine_word(0, 0, "Do uzbierania:");
+    printLine_num(16, 0, tab[3]);
+  }else{
+    printLine_word(0, 0, "Zebrane:");
+    printLine_num(12, 0, i);
+    printLine_word(14, 0, "/");
+    printLine_num(15, 0, tab[3]);
+  }
+  }
+
   lapka_kota();
   spr_alarm();
 }
@@ -125,7 +140,7 @@ WiFi.begin(ssid, password);
 void p1czyWcisniety() {
   if((digitalRead(p1)==HIGH)&&(ostatnio1==false)){
     p1wcisniecia++;
-    if(p1wcisniecia>=6){
+    if(p1wcisniecia>=5){
       p1wcisniecia=1;
     }
     p2wcisniecia=0;
@@ -138,16 +153,6 @@ void p1czyWcisniety() {
 void p2czyWcisniety(){
   if((digitalRead(p2)==HIGH)&&(ostatnio2==false)){
     p2wcisniecia++;
-    switch(p1wcisniecia)
-    {
-      case 1:
-      p2wcisniecia=p2wcisniecia %7; break;
-      case 2:
-      p2wcisniecia=p2wcisniecia %24; break;
-      case 3:
-      p2wcisniecia=p2wcisniecia %60; break;
-      case 4: p2wcisniecia=p2wcisniecia %100; break;
-    }
     ostatnio2=true;
   }else if(digitalRead(p2)==LOW){
     ostatnio2=false;
@@ -175,15 +180,22 @@ void p3czyWcisniety()
 
 void alarm_ustaw()
 {
+  if(tm==NULL) return;
   p1czyWcisniety();
   p2czyWcisniety();
   if(p1wcisniecia>=1 && p1wcisniecia <=5){
-  tab[p1wcisniecia-1]=p2wcisniecia;
-  tab[0] = tm->tm_wday;
-    //if(tab[3]>=60)  {tab[2]++; tab[3]=0;}
-    if(tab[2]>=60)  {tab[1]++; tab[2]=0;}
-    if(tab[1]>=24)  {tab[0]++; tab[1]=0;}
-    if(tab[0]>=7)   {tab[0]=0;}
+    if(p1wcisniecia==1){
+       tab[0] =p2wcisniecia+tm->tm_wday;
+    }else{
+      tab[p1wcisniecia-1]=p2wcisniecia;
+    }
+
+    switch(p1wcisniecia){
+      case 1: if(tab[0]>=7)  {p2wcisniecia=0;} break;
+      case 2: if(tab[1]>=24) {tab[0]++; p2wcisniecia=0;}  break;
+      case 3: if(tab[2]>=60) {tab[1]++; p2wcisniecia=0;}  break;
+      case 4: if(tab[3]>=100) {p2wcisniecia=0;} break;
+    }
   }
 
 }
@@ -210,7 +222,7 @@ void waga_setup()
     LoadCell.begin();
     LoadCell.setSamplesInUse(10);
     float calibration; 
-    calibration = 696.0;  // mnożnik napięcia na masę (do zmienienie ewentualnie)
+    calibration = -16347.25;  // mnożnik napięcia na masę (do zmienienie ewentualnie) //696.0
     unsigned long stabbilization = 2000;  // ile program czeka na stabylizajce mostka
     boolean _tare = true;  // po włączeniu waga ustawia się na masę zero i po tym mierzy dopiero
     LoadCell.start(stabbilization, _tare);  //włączenie mierzenia
@@ -255,7 +267,6 @@ void wys_czas(){
     snprintf(alarmBuf, sizeof(alarmBuf), 
               "%02d:%02d:%02d", 
               tab[0],tab[1], tab[2]);
-    printLine_num(16, 0, tab[4]);
     printLine_word(0, 3, "ALARM: "); 
     lcd.setCursor(6, 3);  lcd.print(alarmBuf);
     lcd.setCursor((COLUMNS - 8) / 2, 1); lcd.print(timeBuf);
@@ -264,10 +275,11 @@ void wys_czas(){
 }
 
 void spr_alarm(){
+  if(tm==NULL) return;
     if(digitalRead(p3_out)==LOW){
       if((tab[0]<=tm->tm_mday)&&(tab[1]<=tm->tm_hour)&&(tab[2]<=tm->tm_min))
     {
-        if(tab[4]<=i){
+        if(tab[3]<=i){
           //glosnik();
           Serial.println("alarm");
         }
@@ -277,22 +289,70 @@ void spr_alarm(){
 
 bool spr_wage() //patrzy 
 {
+   int temp_i;
      if (LoadCell.update()){
+      temp_i = LoadCell.getData();
+        if(temp_i>=0.5){
       return true;
      }else{
       return false;
      }
+    }else{
+      return false;
+    }
 }
 
 void lapka_kota()
 {
+  int temp_i2;
   if(spr_wage()==true){
     lapka.write(90);
     if(czas_ruchu_lapki==7){
-      i +=LoadCell.getData(); 
+      temp_i2 = LoadCell.getData();
+      if(temp_i2>=4.8 && temp_i2<=5.4){
+       i +=5;
+      } 
     }
   }else{
     lapka.write(0);
   }
 }
   
+// głośnik ->
+// definicja nut
+
+  int melody[]{
+  
+    };
+  
+  int notes = sizeof(melody) / sizeof(melody[0]) / 2;
+  int wholenote = (60000 * 4) / tempo;
+  int divider = 0, noteDuration = 0;
+
+  void glosnik(){
+    for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
+      divider = melody[thisNote + 1];
+    if (divider > 0) {
+      noteDuration = (wholenote) / divider;
+    } else if (divider < 0) {
+      noteDuration = (wholenote) / abs(divider);
+      noteDuration *= 1.5; 
+    }
+     tone(glosnik_in , melody[thisNote], noteDuration * 0.9); // ewentualnie ledcWriteTone() jak przestanie działać w testach 
+     delay(noteDuration);
+     noTone(glosnik_in);
+}
+}
+
+
+void waga_lcd_wypisz(){ // do testu
+  const int f = 500;  // częstotliwość  przeysłania 
+    if (LoadCell.update()&&(millis() > t + f)) { //LoadCell.update() - sprawdza czy HX711 posiada nowe informacje do oczytu a reszta to mini zegar
+      float i = LoadCell.getData(); // 
+      printLine_word(0, 0, "masa:");
+      lcd.setCursor(6, 0);
+      lcd.print(i, 2); // wypisanie masy z dokładnością 2 miejsc po przecinku
+      t = millis(); // resetuje t 
+    }
+    delay(1000);
+}
