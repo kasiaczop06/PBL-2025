@@ -33,10 +33,10 @@ bool p3wcisniety = false;
 bool ostatnio1=0, ostatnio2=0;
 int czas_ruchu_lapki=0;
 int w;
-int p1 = 15;
-int p2 = 17;
-int p3_in = 4; 
-int p3_out = 16; 
+int p1 = 10;//15;
+int p2 = 9;//17;
+int p3_in = 20;//4; 
+int p3_out = 8;//16; 
 int tab[4]={0, 0, 0, 0}; // tab{dzień, godzina, minuta, ilość pieniędzy do uzbierania}
 float i=0;
 byte last1;
@@ -191,10 +191,10 @@ void alarm_ustaw()
     }
 
     switch(p1wcisniecia){
-      case 1: if(tab[0]>=7)  {p2wcisniecia=0;} break;
+      case 1: if(tab[0]>7)  {p2wcisniecia=0;} break;
       case 2: if(tab[1]>=24) {tab[0]++; p2wcisniecia=0;}  break;
       case 3: if(tab[2]>=60) {tab[1]++; p2wcisniecia=0;}  break;
-      case 4: if(tab[3]>=100) {p2wcisniecia=0;} break;
+      case 4: if(tab[3]>100) {p2wcisniecia=0;} break;
     }
   }
 
@@ -316,43 +316,4 @@ void lapka_kota()
   }else{
     lapka.write(0);
   }
-}
-  
-// głośnik ->
-// definicja nut
-
-  int melody[]{
-  
-    };
-  
-  int notes = sizeof(melody) / sizeof(melody[0]) / 2;
-  int wholenote = (60000 * 4) / tempo;
-  int divider = 0, noteDuration = 0;
-
-  void glosnik(){
-    for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
-      divider = melody[thisNote + 1];
-    if (divider > 0) {
-      noteDuration = (wholenote) / divider;
-    } else if (divider < 0) {
-      noteDuration = (wholenote) / abs(divider);
-      noteDuration *= 1.5; 
-    }
-     tone(glosnik_in , melody[thisNote], noteDuration * 0.9); // ewentualnie ledcWriteTone() jak przestanie działać w testach 
-     delay(noteDuration);
-     noTone(glosnik_in);
-}
-}
-
-
-void waga_lcd_wypisz(){ // do testu
-  const int f = 500;  // częstotliwość  przeysłania 
-    if (LoadCell.update()&&(millis() > t + f)) { //LoadCell.update() - sprawdza czy HX711 posiada nowe informacje do oczytu a reszta to mini zegar
-      float i = LoadCell.getData(); // 
-      printLine_word(0, 0, "masa:");
-      lcd.setCursor(6, 0);
-      lcd.print(i, 2); // wypisanie masy z dokładnością 2 miejsc po przecinku
-      t = millis(); // resetuje t 
-    }
-    delay(1000);
 }
