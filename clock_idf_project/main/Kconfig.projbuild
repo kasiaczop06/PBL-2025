@@ -1,0 +1,82 @@
+menu "ESP32 Clock Configuration"
+
+    config CLOCK_WIFI_SSID
+        string "WiFi SSID"
+        default "Xiaomi 11T Pro"
+        help
+            SSID (network name) for the clock to connect to.
+
+    config CLOCK_WIFI_PASSWORD
+        string "WiFi Password"
+        default "rodaknieznany"
+        help
+            WiFi password (WPA or WPA2) for the clock to connect to.
+
+    config CLOCK_NTP_SERVER
+        string "NTP Server"
+        default "pool.ntp.org"
+        help
+            NTP server to use for time synchronization.
+
+    config CLOCK_TIMEZONE
+        string "Timezone"
+        default "CET-1CEST,M3.5.0,M10.5.0/3"
+        help
+            Timezone string in POSIX format.
+            Examples:
+            - CET-1CEST,M3.5.0,M10.5.0/3 (Central European Time)
+            - EST5EDT,M3.2.0/2,M11.1.0 (Eastern US Time)
+            - PST8PDT,M3.2.0,M11.1.0 (Pacific US Time)
+
+    config CLOCK_LCD_I2C_ADDR
+        hex "LCD I2C Address"
+        default 0x27
+        help
+            I2C address of the LCD display (typically 0x27 or 0x3F).
+
+    config CLOCK_HX711_CALIBRATION
+        string "HX711 Calibration Factor"
+        default "-16347.25"
+        help
+            Calibration factor for the HX711 load cell.
+            This value converts raw ADC readings to weight units.
+
+    config CLOCK_SERVO_MIN_ANGLE
+        int "Servo Minimum Angle"
+        default 0
+        range 0 180
+        help
+            Minimum angle for servo motor (retracted position).
+
+    config CLOCK_SERVO_MAX_ANGLE
+        int "Servo Maximum Angle"
+        default 90
+        range 0 180
+        help
+            Maximum angle for servo motor (extended position).
+
+    config CLOCK_SCALE_DETECTION_THRESHOLD
+        string "Scale Detection Threshold"
+        default "0.5"
+        help
+            Minimum weight in units to trigger servo activation.
+
+    config CLOCK_COIN_MIN_WEIGHT
+        string "Coin Minimum Weight"
+        default "4.8"
+        help
+            Minimum weight in units for valid coin detection.
+
+    config CLOCK_COIN_MAX_WEIGHT
+        string "Coin Maximum Weight"
+        default "5.4"
+        help
+            Maximum weight in units for valid coin detection.
+
+    config CLOCK_COIN_VALUE
+        int "Coin Value"
+        default 5
+        help
+            Value to add when a valid coin is detected.
+
+endmenu

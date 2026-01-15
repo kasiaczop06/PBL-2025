@@ -1,0 +1,510 @@
+ESP32 CLOCK SYSTEM ARCHITECTURE DIAGRAM
+========================================
+
+HARDWARE ARCHITECTURE:
+======================
+
+                                    ESP32
+                    ┌───────────────────────────────────────┐
+                    │                                       │
+    [WiFi]          │   ┌─────────────────────────────┐   │
+       ↕            │   │  FreeRTOS Kernel (4 tasks) │   │
+    Internet ←──────┼───┤                             │   │
+    (NTP)           │   │  - time_update_task         │   │
+                    │   │  - display_task             │   │
+    GPIO 21 ←───────┼───┤  - button_task              │   │   SDA to LCD
+    GPIO 22 ←───────┼───┤  - scale_servo_task         │   │   SCL to LCD
+                    │   │                             │   │
+    GPIO 18 ←───────┼───┤                             │   │   DOUT from HX711
+    GPIO 19 ←───────┼───┤                             │   │   SCK to HX711
+                    │   │                             │   │
+    GPIO 13 ───────→┼───┤                             │   │   PWM to Servo
+                    │   │                             │   │
+    GPIO 10 ←───────┼───┤                             │   │   Button 1
+    GPIO 9  ←───────┼───┤                             │   │   Button 2
+    GPIO 20 ←───────┼───┤                             │   │   Button 3 IN
+    GPIO 8  ───────→┼───┤                             │   │   Button 3 OUT
+                    │   │                             │   │
+    5V  ────────────┼───┤                             │   │   Power
+    GND ────────────┼───┤                             │   │   Ground
+                    │   └─────────────────────────────┘   │
+                    │                                       │
+                    └───────────────────────────────────────┘
+
+
+PERIPHERAL CONNECTIONS:
+=======================
+
+    ┌─────────────────┐
+    │   LCD 20x4      │
+    │   I2C Display   │
+    ├─────────────────┤
+    │ SDA ←─── GPIO21 │
+    │ SCL ←─── GPIO22 │
+    │ VCC ←─── 5V     │
+    │ GND ←─── GND    │
+    └─────────────────┘
+
+    ┌─────────────────┐        ┌─────────────────┐
+    │   HX711 ADC     │        │   Load Cell     │
+    │   Amplifier     │        │   (5kg)         │
+    ├─────────────────┤        ├─────────────────┤
+    │ DT  ←─── GPIO18 │   E+   │ Red             │
+    │ SCK ───→ GPIO19 │   E-   │ Black           │
+    │ VCC ←─── 5V     │   A-   │ White           │
+    │ GND ←─── GND    │   A+   │ Green           │
+    │                 │←───────┤                 │
+    └─────────────────┘        └─────────────────┘
+
+    ┌─────────────────┐
+    │   Servo Motor   │
+    │   (SG90)        │
+    ├─────────────────┤
+    │ SIG ←─── GPIO13 │
+    │ VCC ←─── 5V     │
+    │ GND ←─── GND    │
+    └─────────────────┘
+
+    ┌─────────────────┐
+    │   Button 1      │
+    ├─────────────────┤
+    │ ───┬─── GPIO10  │
+    │    └─── GND     │
+    └─────────────────┘
+
+    ┌─────────────────┐
+    │   Button 2      │
+    ├─────────────────┤
+    │ ───┬─── GPIO9   │
+    │    └─── GND     │
+    └─────────────────┘
+
+    ┌─────────────────┐
+    │   Button 3      │
+    ├─────────────────┤
+    │ ───┬─── GPIO20  │
+    │    └─── GND     │
+    └─────────────────┘
+
+
+SOFTWARE TASK ARCHITECTURE:
+===========================
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                          FreeRTOS Scheduler                          │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                       │
+│  ┌────────────────────┐  ┌────────────────────┐                     │
+│  │  time_update_task  │  │   display_task     │                     │
+│  │  Priority: 5       │  │   Priority: 4      │                     │
+│  │  Interval: 1000ms  │  │   Interval: 100ms  │                     │
+│  ├────────────────────┤  ├────────────────────┤                     │
+│  │ • Update time      │  │ • Update LCD       │                     │
+│  │ • Check scale      │  │ • Display time     │                     │
+│  │ • Increment timer  │  │ • Show date/day    │                     │
+│  └────────────────────┘  │ • Display alarm    │                     │
+│                          │ • Show collected   │                     │
+│                          └────────────────────┘                     │
+│                                                                       │
+│  ┌────────────────────┐  ┌────────────────────┐                     │
+│  │   button_task      │  │ scale_servo_task   │                     │
+│  │   Priority: 3      │  │   Priority: 4      │                     │
+│  │   Interval: 10ms   │  │   Interval: 100ms  │                     │
+│  ├────────────────────┤  ├────────────────────┤                     │
+│  │ • Check Button 3   │  │ • Read scale       │                     │
+│  │ • Debounce 50ms    │  │ • Control servo    │                     │
+│  │ • Toggle mode      │  │ • Detect coins     │                     │
+│  └────────────────────┘  │ • Check alarm      │                     │
+│                          └────────────────────┘                     │
+│                                                                       │
+├──────────────────────────────────────────────────────────────────────┤
+│                      Shared Resources (Mutex)                        │
+│                   • current_time (struct tm)                         │
+│                   • wifi_connected (bool)                            │
+│                   • time_synced (bool)                               │
+└──────────────────────────────────────────────────────────────────────┘
+
+
+DATA FLOW DIAGRAM:
+==================
+
+WiFi/NTP Time Flow:
+───────────────────
+
+    Internet
+       │
+       ↓ NTP Request (UDP port 123)
+   ┌───────┐
+   │ SNTP  │
+   │Client │
+   └───┬───┘
+       ↓ epoch time
+   ┌───────┐
+   │Convert│ localtime_r()
+   │to tm  │
+   └───┬───┘
+       ↓ struct tm
+   ┌─────────────┐
+   │ Mutex Lock  │
+   │current_time │
+   └─────┬───────┘
+         ↓ read
+   ┌──────────┐
+   │  Tasks   │ (time_update, display)
+   └──────────┘
+
+
+Scale/Servo Control Flow:
+──────────────────────────
+
+   Load Cell
+       │
+       ↓ analog voltage
+   ┌─────────┐
+   │ HX711   │ (24-bit ADC)
+   │ Amplify │
+   └────┬────┘
+        ↓ digital pulses
+   ┌──────────┐
+   │Read Data │ (bit-bang protocol)
+   │10 samples│
+   └────┬─────┘
+        ↓ average value
+   ┌──────────┐
+   │ Convert  │ (apply scale factor)
+   │ to units │
+   └────┬─────┘
+        ↓ weight (grams)
+   ┌──────────┐     YES    ┌──────────┐
+   │weight >  ├────────────→│ Servo    │
+   │threshold?│             │ to 90°   │
+   └────┬─────┘             └──────────┘
+        │ NO
+        ↓
+   ┌──────────┐
+   │ Servo    │
+   │ to 0°    │
+   └──────────┘
+        │
+        ↓ (after 7 seconds)
+   ┌──────────────┐
+   │ Check coin   │
+   │ weight range │
+   └────┬─────────┘
+        ↓ valid coin
+   ┌──────────────┐
+   │ Add value to │
+   │  collected   │
+   └──────────────┘
+
+
+Button Configuration Flow:
+──────────────────────────
+
+   Button 3 Press
+         │
+         ↓
+   ┌──────────┐     Toggle    ┌──────────────┐
+   │Debounce  ├───────────────→│ GPIO 8 State │
+   │  50ms    │                └──────┬───────┘
+   └──────────┘                       │
+                                      ↓
+        ┌──────────────────────┬─────────┬─────────────┐
+        │                      │         │             │
+   HIGH │                      │    LOW  │             │
+        ↓                      ↓         ↓             ↓
+   ┌──────────┐         ┌──────────────────────────────┐
+   │  Setup   │         │     Normal Display Mode      │
+   │   Mode   │         │  • Show current time/date    │
+   │          │         │  • Show collected/target     │
+   ├──────────┤         │  • Display alarm time        │
+   │Button 1: │         └──────────────────────────────┘
+   │ Cycle    │
+   │ Settings │
+   │          │
+   │Button 2: │
+   │Increment │
+   │  Value   │
+   └──────────┘
+
+
+Alarm Check Flow:
+─────────────────
+
+   Every 100ms
+        │
+        ↓
+   ┌──────────────┐
+   │ Setup mode?  │───YES───→ Skip alarm check
+   └───┬──────────┘
+       │ NO
+       ↓
+   ┌──────────────────────┐
+   │ Current day >=       │
+   │ Alarm day?           │
+   └───┬──────────────────┘
+       │ YES
+       ↓
+   ┌──────────────────────┐
+   │ Current hour >=      │
+   │ Alarm hour?          │
+   └───┬──────────────────┘
+       │ YES
+       ↓
+   ┌──────────────────────┐
+   │ Current minute >=    │
+   │ Alarm minute?        │
+   └───┬──────────────────┘
+       │ YES
+       ↓
+   ┌──────────────────────┐
+   │ Collected amount >=  │
+   │ Target amount?       │
+   └───┬──────────────────┘
+       │ YES
+       ↓
+   ┌──────────────┐
+   │ TRIGGER      │
+   │ ALARM!       │
+   │ (log message)│
+   └──────────────┘
+
+
+LCD DISPLAY LAYOUT:
+===================
+
+Normal Mode (GPIO 8 = LOW):
+────────────────────────────
+
+    Column: 0         10        19
+           ┌────────────────────┐
+    Row 0: │Zebrane: 25/100     │  ← Collection progress
+    Row 1: │      12:34:56      │  ← Current time (centered)
+    Row 2: │Sroda  15/01/2026   │  ← Day of week, Date
+    Row 3: │ALARM: 03:09:30     │  ← Alarm setting
+           └────────────────────┘
+
+
+Setup Mode (GPIO 8 = HIGH):
+────────────────────────────
+
+    Column: 0         10        19
+           ┌────────────────────┐
+    Row 0: │Do uzbierania: 100  │  ← Target to collect
+    Row 1: │      12:34:56      │  ← Current time (centered)
+    Row 2: │Sroda  15/01/2026   │  ← Day of week, Date
+    Row 3: │ALARM: 03:09:30     │  ← Alarm being edited
+           └────────────────────┘
+                      ↑
+           Button 1: Cycle (Day/Hour/Min/Amount)
+           Button 2: Increment selected value
+
+
+COMPONENT INTERACTION SEQUENCE:
+================================
+
+System Startup:
+───────────────
+
+    1. ESP32 Power On
+    2. Bootloader loads
+    3. app_main() starts
+    4. Initialize NVS
+    5. Setup GPIO pins
+    6. Initialize I2C bus
+    7. Initialize LCD (4-bit mode)
+    8. Setup Servo (LEDC PWM)
+    9. Initialize HX711
+    10. Connect WiFi
+    11. Start SNTP client
+    12. Create 4 FreeRTOS tasks
+    13. Tasks begin execution
+
+
+Normal Operation Cycle:
+────────────────────────
+
+    Every 1000ms (time_update_task):
+    ├─ Update time from NTP
+    ├─ Check scale for weight
+    └─ Increment movement timer
+
+    Every 100ms (display_task):
+    ├─ Update LCD with current info
+    ├─ Show time/date/day
+    └─ Display alarm or collection
+
+    Every 10ms (button_task):
+    ├─ Check Button 3
+    ├─ Debounce 50ms
+    └─ Toggle mode if pressed
+
+    Every 100ms (scale_servo_task):
+    ├─ Read scale (10 samples)
+    ├─ Control servo based on weight
+    ├─ Detect valid coins
+    └─ Check alarm conditions
+
+
+Coin Detection Sequence:
+─────────────────────────
+
+    1. Weight detected (>0.5g)
+       ↓
+    2. Servo moves to 90°
+       ↓
+    3. Wait 7 seconds (movement_time counter)
+       ↓
+    4. Check if weight in range (4.8-5.4g)
+       ↓ YES
+    5. Add coin value (5 PLN)
+       ↓
+    6. Update display
+       ↓
+    7. Weight removed
+       ↓
+    8. Servo returns to 0°
+
+
+MEMORY MAP:
+===========
+
+Flash Memory Layout (4MB):
+───────────────────────────
+
+    0x00000000  ┌────────────────────┐
+                │   Bootloader       │  28 KB
+    0x00008000  ├────────────────────┤
+                │   Partition Table  │  3 KB
+    0x00009000  ├────────────────────┤
+                │   NVS Storage      │  24 KB
+    0x0000f000  ├────────────────────┤
+                │   PHY Init         │  4 KB
+    0x00010000  ├────────────────────┤
+                │                    │
+                │   Application      │  ~600 KB
+                │   (clock_idf)      │
+                │                    │
+    0x000AC000  ├────────────────────┤
+                │                    │
+                │   Unused Space     │  ~3.3 MB
+                │                    │
+    0x00400000  └────────────────────┘
+
+
+RAM Memory Layout (520KB):
+───────────────────────────
+
+    0x3FFB0000  ┌────────────────────┐
+                │   DMA Memory       │
+                ├────────────────────┤
+                │   WiFi/BT Stack    │  ~15 KB
+                ├────────────────────┤
+                │   LWIP Stack       │  ~10 KB
+                ├────────────────────┤
+                │   Task Stacks:     │
+                │   - time_update    │  4 KB
+                │   - display        │  4 KB
+                │   - button         │  2 KB
+                │   - scale_servo    │  4 KB
+                │   - main           │  8 KB
+                ├────────────────────┤
+                │   Heap (malloc)    │  ~5 KB
+                ├────────────────────┤
+                │   Static Data      │  ~8 KB
+                ├────────────────────┤
+                │   FreeRTOS Kernel  │  ~8 KB
+                ├────────────────────┤
+                │   Free RAM         │  ~450 KB
+    0x3FFF0000  └────────────────────┘
+
+
+TIMING DIAGRAM:
+===============
+
+Timeline (ms):  0    10   20   30   ...  100  ...  1000
+                │    │    │    │          │        │
+button_task:    ├────┼────┼────┼────...───┼───...──┤ (10ms)
+                Check Check Check              Check
+
+display_task:   ├─────────────────────────┼────────┤ (100ms)
+                Update LCD                Update
+
+scale_servo:    ├─────────────────────────┼────────┤ (100ms)
+                Control                   Control
+
+time_update:    ├──────────────────────────────────┤ (1000ms)
+                Update time & check scale
+
+
+SIGNAL WAVEFORMS:
+=================
+
+I2C Communication (SDA/SCL):
+────────────────────────────
+
+    SCL: ─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─┐ ┌─
+         └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘ └─┘
+
+    SDA: ──┐   ┌───┐ ┌───────┐   ┌───┐
+         S └───┘   └─┘       └───┘ A └─
+           T                       C
+           A  [ADDRESS]  [DATA]    K
+           R
+           T
+
+    Frequency: 100 kHz
+    Address: 0x27 (LCD)
+
+
+HX711 Protocol (DT/SCK):
+────────────────────────
+
+    SCK: ────┐┌┐┌┐┌┐...(24 pulses)...┐┌┐┌┐────
+             └┘└┘└┘                   └┘└┘
+
+    DT:  ────┬─┬─┬─┬─...(24 bits)...─┬─┬─────
+              └─┘ └─┘                 └─┘
+             MSB                      LSB
+
+    Pulse width: ~1 μs
+    Conversion time: ~50 ms
+
+
+Servo PWM Signal (50 Hz):
+──────────────────────────
+
+    0°:  ┌─┐                     (1.0ms pulse)
+         │ │
+         ┘ └─────────────────────  (20ms period)
+
+    90°: ┌───┐                   (1.5ms pulse)
+         │   │
+         ┘   └───────────────────  (20ms period)
+
+    180°:┌─────┐                 (2.0ms pulse)
+         │     │
+         ┘     └─────────────────  (20ms period)
+
+
+POWER CONSUMPTION OVER TIME:
+=============================
+
+Current (mA)
+    800 │        ┌─┐
+        │        │ │  Servo active
+    600 ├────────┘ └────────────
+        │
+    400 │
+        │
+    200 ├─────────────────────────  Normal operation
+        │    WiFi + LCD + HX711
+      0 └──┬──────────────────────
+         0  1  2  3  4  5  6  7  8  Time (seconds)
+
+    Average: ~200 mA
+    Peak: ~800 mA (during servo movement)
+
+
+END OF SYSTEM DIAGRAM
+=====================
