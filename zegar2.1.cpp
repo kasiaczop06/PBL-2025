@@ -17,12 +17,14 @@ const char* dayBuf = "---";
 char alarmBuf[13];
 struct tm *tm;
 int tempo = 140;
-int glosnik_in = 14;
-const int servo_in=13; //połączenie servo
+int glosnik_in = 17;
+const int servo_in=20; //połączenie servo
 const int HX711_dout = 18; // połączenia wagi
 const int HX711_sck = 19; // połączenia wagi
-const char* ssid = "Xiaomi 11T Pro";
-const char* password = "rodaknieznany";
+
+const char* ssid = "iPhone (Kasia)";
+const char* password = "kasiakasia1357";
+
 unsigned long t = 0;
 unsigned long last = 0;
 unsigned long last3=0;
@@ -33,10 +35,12 @@ bool p3wcisniety = false;
 bool ostatnio1=0, ostatnio2=0;
 int czas_ruchu_lapki=0;
 int w;
-int p1 = 10;//15;
-int p2 = 9;//17;
-int p3_in = 20;//4; 
-int p3_out = 8;//16; 
+
+int p1 = 0;//15;
+int p2 = 1;//17;
+int p3_in = 2;//4; 
+int p3_out = 21;//16; 
+
 int tab[4]={0, 0, 0, 0}; // tab{dzień, godzina, minuta, ilość pieniędzy do uzbierania}
 float i=0;
 byte last1;
@@ -67,6 +71,7 @@ void waga_lcd_wypisz();
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("Start");
   Wire.begin();
 
   lcd.begin(COLUMNS, ROWS, LCD_5x8DOTS);

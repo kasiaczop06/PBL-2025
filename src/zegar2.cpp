@@ -8,7 +8,7 @@
 const int HX711_dout = 18;
 const int HX711_sck = 5;
 HX711_ADC LoadCell(HX711_dout, HX711_sck);
-LiquidCrystal_I2C lcd(PCF8574_ADDR_A21_A11_A01, 4, 5, 6, 16, 11, 12, 13, 14, POSITIVE);
+LiquidCrystal_I2C lcd(0x27, COLUMNS, ROWS);  // I2C address 0x27, try 0x3F if not working
 const int calVal_eepromAdress = 0;
 unsigned long t = 0;
 
@@ -24,7 +24,8 @@ void waga_setup(){
 }
 
 void lcd_setup(){
-    lcd.begin(COLUMNS, ROWS, LCD_5x8DOTS);
+    lcd.init();
+    lcd.backlight();
     lcd.setCursor(0, 0);
     lcd.println(F("00:00"));
     delay(1000);
